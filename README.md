@@ -34,11 +34,10 @@ and the raster "turbidity_raster_mean.nc"
 Output = a csv of the Australia reefs with the corresponding kd490 value 'Australia_Turbidity_Final.csv', 
 and FigureS4 - the nls() analysis of the kd490 and reef flat size.
 
-07_All_Reefs_Turbidity_Sampling_Final (*takes ~2-3 days to run this code)
-Input = mean turbidity globally raster "turbidity_raster_mean.nc", ReefBASE shapefiles of all reefs globally 
-(http://www.reefbase.org/main.aspx), the Ecoregions shapefiles (in the /ecoregion_exportPolygon folder).
-Output = a csv of the reef area in each ecoregion that falls within the 'moderating turbidity' range 
-"Ecoregion_turbidity_probabilities_080_to_127.csv", which is Supplementary Table 2.
+07_All_Reefs_Turbidity_Sampling_Final (takes 2-3 days to run this code)
+Input = mean turbidity globally raster "turbidity_raster_mean.nc", ReefBASE shapefiles of all reefs globally (http://www.reefbase.org/main.aspx), the Ecoregions shapefiles (in the /ecoregion_exportPolygon folder).
+Output = a csv of the reef area in each ecoregion that falls within the 'moderating turbidity' range
+"Ecoregion_turbidity_probabilities_080_to_127.csv', which is Supplementary Table 2.
 
 08_Proportion_of_Reefs_in_Moderating_Turbidity_Range_Final
 Input = the Ecoregions shapefiles (in the /shapefiles folder), the csv of the reef area in each ecoregion 
