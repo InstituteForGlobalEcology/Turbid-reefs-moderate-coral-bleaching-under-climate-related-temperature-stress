@@ -6,8 +6,10 @@ just a particular section. If you need to use the global mean turbidity raster, 
 please run code sections 01 and 02 to create the raster. It is too large to fit in GitHub.
 
 01_Get_Turbidity_Data_final
+
 Input= the kd490 data (available from https://oceandata.sci.gsfc.nasa.gov/MODIS-Aqua/Mapped/Monthly/4km/Kd_490/) 
 and a csv file with the SST CoRTAD data "Reef_Check_with_cortad_variables_with_annual_rate_of_SST_change.csv"
+
 Output = a csv with the Reef Check, SST, and kd490 data "Reef_Check_with_turbidity_kd490.csv"
 
 02_Turbidity_Rasters_Mean_Final
