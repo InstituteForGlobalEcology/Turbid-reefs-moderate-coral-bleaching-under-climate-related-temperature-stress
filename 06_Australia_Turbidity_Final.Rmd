@@ -1,0 +1,62 @@
+---
+title: "Great_Barrier_Reef_turbidity_gradient"
+author: "SS"
+date: "November 23, 2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+#This is a case study of a turbidty gradient in the Great Barrier Reef. We read in a csv that contains the lat/lon coordinates of reefs along this turbidity gradient and contains the reef flat size. We extract the corresponding Kd490 values from the mean_turbidity_globally raster. We perform a non-linear least squares regression.
+
+```{r load libraries}
+library(raster)
+library(rddtools)
+library(nls2)
+library(VGAM)
+library(investr)
+library(grDevices)
+library(viridis)
+```
+
+home<-"C:/Users/Shannon/Desktop/Ecoregions/turbidity/Final"
+setwd(home)
+Australia_reefs <- read.csv(file=file.path(home,"Australia_Islands_Reef_Measurements.csv"), header=TRUE, sep=",")
+names(Australia_reefs)[names(Australia_reefs)=="ï..Islands"]<-"Islands"
+
+```{r obtain turbidity values for each Australia reef and write a new csv}
+Australia_points<-cbind(Australia_reefs$Long_Deg, Australia_reefs$Lat_Deg)
+turbidity_raster<-raster("turbidity_raster_mean.nc")
+result <- extract(turbidity_raster, Australia_points)
+Australia_reefs$turbidity<-result
+
+write.csv(Australia_reefs, file=file.path(home,'Australia_Turbidity_Final.csv'),row.names=T)
+```
+
+```{r nonlinear model and plot}
+y=Australia_reefs$Average_Distance
+x=Australia_reefs$turbidity
+m <- nls(y ~ a*exp(-b*x), start=list(a=1500, b=10), control=nls.control(maxiter=10000, minFactor=1e-7, tol=1e-5, printEval=F, warnOnly=F))
+summary(m)
+coeff_a=round(summary(m)$coefficients[1,1],2)
+coeff_b=round(summary(m)$coefficients[2,1],2)
+
+png(file=file.path(home,'FigureS4.png'),height=1200,width=2600,res=300)
+plot(x,y, ylim=c(0,1600), xlim=c(0.05,.165), ylab="Width of reef flat (m)", xlab=expression("K"[d]*"490"), bg="black", col="black", pch=21)
+newdataframe<-as.data.frame(cbind(x=Australia_reefs$turbidity, y=Australia_reefs$Average_Distance))
+newdataframe<-newdataframe[!is.na(newdataframe$x),]
+newdataframe<-newdataframe[with(newdataframe, order(x)), ]
+confidence_intervals<-predFit(m, level=0.95, newdata=newdataframe, interval="confidence")
+polygon(x=c(newdataframe$x[1],newdataframe$x,newdataframe$x[length(newdataframe$x)]), y=c(0,confidence_intervals[,3],0), col=adjustcolor("gray", alpha=.5), border=NA)
+polygon(x=c(newdataframe$x[1],newdataframe$x,newdataframe$x[length(newdataframe$x)]), y=c(0,confidence_intervals[,2],0), col="white", border=NA)
+c=seq(0.049,.165, .001)
+lines(c,coeff_a*exp(-1*coeff_b*c), lwd=2.5, col="black", xlim=c(0.05,.165))
+points(x,y, ylim=c(0,1600), xlim=c(0.05,.146), bg="black", col="black", pch=21)
+dev.off()
+confint(m, parm=c('a','b'), level = 0.95)
+```
+
+```{r examine where the 95% confidence interval crosses zero}
+cross_zero<-predFit(m, level=0.95, newdata=data.frame(x=seq(from=.1264, to=.1266, by=.0001)), interval="confidence")
+#the lower 95% confidence interval crosses zero at ~0.127
+```

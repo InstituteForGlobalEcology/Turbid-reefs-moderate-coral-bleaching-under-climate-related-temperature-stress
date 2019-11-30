@@ -1,0 +1,184 @@
+---
+title: "Turbidity"
+author: "SS"
+date: "November 23, 2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+#This reads in the Reef Check data file and the mean global turbidity raster. It extracts the kd490 value for each Reef Check survey, and writes a csv 'Reef_Check_with_turbidity_kd490.csv'.
+
+```{r load libraries}
+library(ncdf4)
+library(stringr)
+```
+
+#set path for where you keep the bleaching data
+Bleaching_data_directory="C:/Users/Shannon/Desktop/Ecoregions/turbidity/Final"
+#set path for the external hard drive where you have downloaded the CoRTAD data
+turbidity_directory="D:/Lab Data/Global/Kd490/Monthly/4km/MODIS_Aqua/netcdf"
+
+#read in the Reef Check csv
+Bleaching_Data <- read.csv(file="Reef_Check_with_Cortad_variables_with_annual_rate_of_SST_change.csv", header=TRUE, sep=",")
+#use just the "Bleaching (% of population)" data, not the "Bleaching (% of colony)" data
+Bleaching_Data=subset(Bleaching_Data, Organism.Code=="Bleaching (% of population)")
+
+#2002_07 through 2017_02
+setwd(turbidity_directory)
+#first just read in one of the months so we can do some calculations
+turbidity<-nc_open("MODIS_Aqua_Monthly_4km_KD490_2002_07.nc", write=FALSE, readunlim=TRUE, verbose=FALSE)
+
+#turbidity$var$Kd_490$units # "m^-1"
+
+number_of_surveys<-dim(Bleaching_Data)[1]
+```{r calculate latitude grid cell}
+turbidity$var$Kd_490$dim[[2]] #name "lat" $units "degree_north" len=4320
+turbidity$var$Kd_490$dim[[2]]$vals
+
+lat_step<-turbidity$var$Kd_490$dim[[2]]$vals[1]-turbidity$var$Kd_490$dim[[2]]$vals[2]
+
+Bleaching_turbidity_lat_cell<-array(0, dim=number_of_surveys)
+
+for (i in 1:number_of_surveys)
+{
+lat_grid_cell<-NA
+
+if(is.na(Bleaching_Data$Latitude.Degrees[i]))
+{lat_grid_cell<-NA}else{
+n_lat_steps<-floor((turbidity$var$Kd_490$dim[[2]]$vals[1]-Bleaching_Data$Latitude.Degrees[i])/lat_step+1)
+
+  if((turbidity$var$Kd_490$dim[[2]]$vals[n_lat_steps]+lat_step)>=Bleaching_Data$Latitude.Degrees[i])
+  {
+    if((turbidity$var$Kd_490$dim[[2]]$vals[n_lat_steps]-lat_step)<=Bleaching_Data$Latitude.Degrees[i])
+    {lat_grid_cell<-n_lat_steps}
+    else
+    {
+      repeat{
+        n_lat_steps=n_lat_steps+1
+        if((turbidity$var$Kd_490$dim[[2]]$vals[n_lat_steps]-lat_step)<=Bleaching_Data$Latitude.Degrees[i]){
+          if((turbidity$var$Kd_490$dim[[2]]$vals[n_lat_steps]+lat_step)>=Bleaching_Data$Latitude.Degrees[i])
+          {break}
+        }
+      }
+      lat_grid_cell<-n_lat_steps
+    }
+    
+  }
+  
+  if((turbidity$var$Kd_490$dim[[2]]$vals[n_lat_steps]+lat_step)<Bleaching_Data$Latitude.Degrees[i])
+  {
+  repeat{
+      n_lat_steps=n_lat_steps-1
+      if((turbidity$var$Kd_490$dim[[2]]$vals[n_lat_steps]+lat_step)>=Bleaching_Data$Latitude.Degrees[i])
+      {
+        if((turbidity$var$Kd_490$dim[[2]]$vals[n_lat_steps]-lat_step)<=Bleaching_Data$Latitude.Degrees[i])
+        {break}
+      }
+    }
+    lat_grid_cell<-n_lat_steps
+  }
+}
+  Bleaching_turbidity_lat_cell[i]<-lat_grid_cell
+}
+```
+
+```{r calculate longitude grid cell}
+turbidity$var$Kd_490$dim[1] # $name "lon" $units "degree_east" len=8640
+turbidity$var$Kd_490$dim[[1]]$vals
+
+lon_step<-turbidity$var$Kd_490$dim[[1]]$vals[2]-turbidity$var$Kd_490$dim[[1]]$vals[1]
+
+Bleaching_turbidity_lon_cell<-array(0, dim=number_of_surveys)
+
+for (i in 1:length(Bleaching_Data$Longitude.Degrees))
+{
+lon_grid_cell<-NA
+
+if(is.na(Bleaching_Data$Longitude.Degrees[i]))
+{lon_grid_cell<-NA}else{
+n_lon_steps<-floor(-1*(turbidity$var$Kd_490$dim[[1]]$vals[1]-Bleaching_Data$Longitude.Degrees[i])/lon_step+1)
+
+  if(n_lon_steps>(length(turbidity$var$Kd_490$dim[[1]]$vals))){n_lon_steps<-(length(turbidity$var$Kd_490$dim[[1]]$vals))}
+  if(n_lon_steps<1){n_lon_steps<-1}
+
+  if((turbidity$var$Kd_490$dim[[1]]$vals[n_lon_steps])+lon_step>=Bleaching_Data$Longitude.Degrees[i])
+  {
+    if((turbidity$var$Kd_490$dim[[1]]$vals[n_lon_steps])-lon_step<Bleaching_Data$Longitude.Degrees[i])
+    {lon_grid_cell<-n_lon_steps}
+    else
+    {
+      repeat{
+        n_lon_steps=n_lon_steps-1
+        if(n_lon_steps>(length(turbidity$var$Kd_490$dim[[1]]$vals))){n_lon_steps<-length(turbidity$var$Kd_490$dim[[1]]$vals); break}
+        if((turbidity$var$Kd_490$dim[[1]]$vals[n_lon_steps])+lon_step>=Bleaching_Data$Longitude.Degrees[i]){
+          if((turbidity$var$Kd_490$dim[[1]]$vals[n_lon_steps])-lon_step<Bleaching_Data$Longitude.Degrees[i])
+          {break}
+        }
+      }
+      lon_grid_cell<-n_lon_steps
+    }
+    
+  }
+  
+  if((turbidity$var$Kd_490$dim[[1]]$vals[n_lon_steps])+lon_step<Bleaching_Data$Longitude.Degrees[i])
+  {
+  repeat{
+      n_lon_steps=n_lon_steps+1
+      if(n_lon_steps==0){n_lon_steps<-1; break}
+      if((turbidity$var$Kd_490$dim[[1]]$vals[n_lon_steps])-lon_step<=Bleaching_Data$Longitude.Degrees[i])
+      {
+        if((turbidity$var$Kd_490$dim[[1]]$vals[n_lon_steps])+lon_step>Bleaching_Data$Longitude.Degrees[i])
+        {break}
+      }
+    }
+    lon_grid_cell<-n_lon_steps
+  }
+}
+  Bleaching_turbidity_lon_cell[i]<-lon_grid_cell
+}
+
+```
+
+Bleaching_Data$kd490_value<-NA
+setwd(turbidity_directory)
+```{r kd490}
+for (i in 1:dim(Bleaching_Data)[1]){
+  yr<-as.character(Bleaching_Data$Year[i])
+  date_string<-str_split(Bleaching_Data$Date[i], "-")
+  month_string<-date_string[[1]][2]
+  if (month_string=="Jan"){month<-"01"}
+  if (month_string=="Feb"){month<-"02"}
+  if (month_string=="Mar"){month<-"03"}
+  if (month_string=="Apr"){month<-"04"}
+  if (month_string=="May"){month<-"05"}
+  if (month_string=="Jun"){month<-"06"}
+  if (month_string=="Jul"){month<-"07"}
+  if (month_string=="Aug"){month<-"08"}
+  if (month_string=="Sep"){month<-"09"}
+  if (month_string=="Oct"){month<-"10"}
+  if (month_string=="Nov"){month<-"11"}
+  if (month_string=="Dec"){month<-"12"}
+  
+  yr_month<-Bleaching_Data$Year[i]+(as.numeric(month)-1)/12
+  if(yr_month>=2002.5 & yr_month<=2017.99){
+    file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_", yr, "_", month, ".nc", sep="")
+    turbidity<-nc_open(file_name, write=FALSE, readunlim=TRUE, verbose=FALSE)
+    turbidity_kd490<-ncvar_get(turbidity, varid="Kd_490")
+    Bleaching_Data$kd490_value[i]<-turbidity_kd490[Bleaching_turbidity_lon_cell[i], Bleaching_turbidity_lat_cell[i]]
+    Sys.sleep(0.2)
+    if(is.na(Bleaching_Data$kd490_value[i])){
+      expand=1
+      Bleaching_Data$kd490_value[i]<-mean(na.omit(as.numeric(turbidity_kd490[max(Bleaching_turbidity_lon_cell[i]-expand, 1):min(Bleaching_turbidity_lon_cell[i]+expand,dim(turbidity_kd490)[2]), max(Bleaching_turbidity_lat_cell[i]-expand,0):min(Bleaching_turbidity_lat_cell[i]+expand,max(dim(turbidity_kd490)[1]))])))
+      if(is.na(Bleaching_Data$kd490_value[i])){
+        expand=2
+        Bleaching_Data$kd490_value[i]<-mean(na.omit(as.numeric(turbidity_kd490[max(Bleaching_turbidity_lon_cell[i]-expand, 1):min(Bleaching_turbidity_lon_cell[i]+expand,dim(turbidity_kd490)[2]), max(Bleaching_turbidity_lat_cell[i]-expand,0):min(Bleaching_turbidity_lat_cell[i]+expand,max(dim(turbidity_kd490)[1]))])))
+      } #close second if is.na turbidity value
+    } #close first if is.na turbidity value
+    print(i)
+    nc_close(turbidity)
+  } #close if bleaching yr month
+} #close main for loop
+```
+
+write.csv(Bleaching_Data, file = file.path(home,'Reef_Check_with_turbidity_kd490.csv'),row.names=T)

@@ -1,0 +1,144 @@
+---
+title: "Untitled"
+author: "SS"
+date: "November 26, 2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+#This creates a figure showing the proportion of reefs within each ecoregion that fall within the 'moderating tubidity' range of 0.08-.127 kd490.
+
+```{r load_libraries}
+library(MASS)
+library(audio)
+library(sp)
+library(foreign)
+library(rgdal)
+library(maptools)
+library(rgeos)
+library(doParallel)
+library(rasterVis)
+library(dismo)
+library(plotKML)
+library(SDMTools)
+library(PBSmapping)
+library(lme4)
+library(blme)
+library(raster)
+library(fields)
+library(RColorBrewer)
+library(sjmisc)
+library(ncdf4)
+library(knitr)
+library(stringr)
+library(ggplot2)
+library(wesanderson)
+library(cowplot)
+library(dplyr)
+library(maptools)
+library(plotrix)
+library(GISTools)
+library(viridis)
+library(fields)
+```
+
+home<-"C:/Users/Shannon/Desktop/Ecoregions/turbidity/Final"
+ECO <- readOGR(file.path(home,'ecoregion_exportPolygon','ecoregion_exportPolygon.shp'))
+
+```{r get rid of the holes in the polygon shapefiles}
+ecos_list<-c()
+for (i in 1:150){
+  eco_i<-Polygons((Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)), ID=i)
+  ecos_list<-append(ecos_list, values=eco_i, after = length(ecos_list))
+  Sys.sleep(.2)
+}
+ecos<-SpatialPolygons(ecos_list)
+
+ecos$ERG<-ECO$ERG
+ecos$Ecoregion<-ECO$Ecoregion
+ecos@proj4string<-ECO@proj4string
+ecos@plotOrder<-ECO@plotOrder
+ecos@data<-ECO@data
+
+ECO<-ecos
+```
+
+
+```{r plotmap_function}
+plot.map<- function(database,center,transf=T,...){
+  Obj <- map(database,...,plot=F)
+  coord <- cbind(Obj[[1]],Obj[[2]])
+  newproj <- "+proj=merc +lon_0=150 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs" #utm
+  nextproj<-"+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0" #latlong
+  # split up the coordinates
+  id <- rle(!is.na(coord[,1]))
+  id <- matrix(c(1,cumsum(id$lengths)),ncol=2,byrow=T)
+  polygons <- apply(id,1,function(i){coord[i[1]:i[2],]})
+  
+  # split up polygons that differ too much
+  polygons <- lapply(polygons,function(x){
+    x[,1] <- x[,1] + center
+    x[,1] <- ifelse(x[,1]>180,x[,1]-360,x[,1])
+    if(sum(diff(x[,1])>300,na.rm=T) >0){
+      id <- x[,1] < 0
+      x <- rbind(x[id,],c(NA,NA),x[!id,])
+    }
+    x
+  })
+  # reconstruct the object
+  polygons <- do.call(rbind,polygons)
+  
+  
+  colnames(polygons)<-c("x",'y')
+  polygons<-as.data.frame(polygons)
+  z<-complete.cases(polygons)
+  p<-z
+  z<-cbind(z,z)
+  polygons<-polygons[complete.cases(polygons),]
+  coordinates(polygons)<-~x+y
+  proj4string(polygons)<-CRS(nextproj)
+  if(transf==T){ polygons<-spTransform(polygons,CRS(newproj))}
+  
+  z[p==F,]<-c(NA,NA)
+  z[which(p==T),]<-coordinates(polygons)
+  Obj[[1]] <- z[,1]
+  Obj[[2]] <- z[,2]
+  
+  map(Obj,...)
+}
+```
+
+
+ecoregions_turbidity_probabilities<-read.csv(file=file.path(home, "Ecoregion_turbidity_probabilities_080_to_127.csv"))
+
+colramp<-colorRampPalette(c("white", brewer.pal(9, "Reds")))(50)
+cols<-c("white", brewer.pal(9, "Reds"))
+brks<-seq(from=0, to=.5, by=.05)
+ecoregions_turbidity_probabilities$cols<-cols[(cut(ecoregions_turbidity_probabilities$Proportion_within_ideal_range, brks, include.lowest=TRUE))]
+ECO$cols<-"white"
+for (i in 1:150){
+  ECO$cols[i]<-ecoregions_turbidity_probabilities$cols[ECO$ERG[i]==ecoregions_turbidity_probabilities$ERG]
+}
+
+
+tiff(file=file.path(home, 'Figure4.tif'), ,height=800,width=3000,res=300)
+par(mgp=c(0.5,0.6,0), mar=c(0,0,0,0))
+plot(ECO, col=ECO$cols, border="turquoise4", lwd=1, xlim=c(111319.4*-150,111319.4*150), ylim=c(111319.4*-43, 111319.4*50))
+box()
+windowsFonts(A=windowsFont('Arial Unicode MS'))
+text(-7868896,-2922012,'Indian Ocean',cex=1.0, family='A')
+text(9438742,487176,'Pacific Ocean',cex=1.0, family='A')
+text(x=(-16654136+111319.4*305), y=1615153*2.15,'Atlantic Ocean',cex=1.0, family='A')
+north.arrow(x=(-16654136+111319.4*220), y=1615153*3, len=(111319.4*2), lab="N", cex=.7)
+scalebar(d=111319.4*36, xy=c((-16654136+111319.4*-27), (1615153*-2.7)), type='bar', divs=4, below="kilometers", label=c("0", "", "4000"))
+mapcol  <- colorRampPalette(c(colramp))
+plotrix::color.legend(60*111319.4,-43*111319.4,120*111319.4,-38*111319.4,legend=c(""),rect.col=colramp,cex=1)
+text(60*111319.4,-35*111319.4,'0%')
+text(120*111319.4,-35*111319.4,'>50%')
+plot.map("world", center=0 ,bg="#00000000",fill=TRUE, col="lightgray",add=T,xlab='longitude',ylab='latitude')
+axis(1,at=c(-10018754.17,3339584.724,16697920),lab=c('60°','180°','-60° '),las=1,tcl=0.35,mgp=c(-1,-1.3,0))
+axis(2, at=c(23*111319.4666666667,0,-23*111319.4666666667),labels=c('23°','0°','-23°'),las=3,tcl=0.35,mgp=c(-2,-1.3,0),hadj=.4)
+axis(3,at=c(-10018754.17,3339584.724,16697920),lab=c('','',''),las=1,tcl=0.35,mgp=c(-1,-1.3,0))
+axis(4, at=c(23*111319.4666666667,0,-23*111319.4666666667),labels=c('','',''),las=2,tcl=0.35,mgp=c(-1,-0.6,0),hadj=0)
+dev.off()

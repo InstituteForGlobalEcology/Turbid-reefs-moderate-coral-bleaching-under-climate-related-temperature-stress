@@ -1,0 +1,260 @@
+---
+title: "turbidity_rasters_mean_final"
+author: "SS"
+date: "November 23, 2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+#This reads in the netcdf files of kd490 data, calculates the mean kd490 spatially, and returns a raster titled "turbidity_raster_mean.nc"
+
+```{r load libraries}
+library(ncdf4)
+library(stringr)
+library(raster)
+```
+
+#set path for where you keep the coral bleaching data
+home<-"C:/Users/Shannon/Desktop/Ecoregions"
+Bleaching_data_directory="C:/Users/Shannon/Desktop/Ecoregions/turbidity/Final"
+
+#Download Kd490 data to an external hard drive from https://oceandata.sci.gsfc.nasa.gov/MODIS-Aqua/Mapped/Monthly/4km/Kd_490/
+#set path for the external hard drive where you have downloaded the turbidity (measured as Kd490) data
+turbidity_directory="D:/Lab Data/Global/Kd490/Monthly/4km/MODIS_Aqua/netcdf"
+
+setwd(turbidity_directory)
+
+#find the mean turbidity over all the months/years and make one raster
+#it's too big to do one calculation over every raster. so do one raster stack per year, find the mean of each raster stack, then stack those means and find the overall mean
+#2003
+file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2003_01.nc", sep="")
+kd490_raster<-raster(file_name)
+turbidity_stack_2003<-stack(kd490_raster)
+for (month in 2:12){
+  if (month<10){month_string<-paste(0,month, sep="")}
+  if (month>=10){month_string<-as.character(month)}
+  file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2003_", month_string, ".nc", sep="")
+  kd490_raster<-raster(file_name)
+  turbidity_stack_2003<-stack(turbidity_stack_2003, kd490_raster)
+}
+remove(kd490_raster)
+mean_2003 <- calc(turbidity_stack_2003, fun = mean, na.rm = T)
+remove(turbidity_stack_2003)
+
+
+#2004
+file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2004_01.nc", sep="")
+kd490_raster<-raster(file_name)
+turbidity_stack_2004<-stack(kd490_raster)
+for (month in 2:12){
+  if (month<10){month_string<-paste(0,month, sep="")}
+  if (month>=10){month_string<-as.character(month)}
+  file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2004_", month_string, ".nc", sep="")
+  kd490_raster<-raster(file_name)
+  turbidity_stack_2004<-stack(turbidity_stack_2004, kd490_raster)
+}
+mean_2004 <- calc(turbidity_stack_2004, fun = mean, na.rm = T)
+remove(turbidity_stack_2004)
+
+#2005
+file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2005_01.nc", sep="")
+kd490_raster<-raster(file_name)
+turbidity_stack_2005<-stack(kd490_raster)
+for (month in 2:12){
+  if (month<10){month_string<-paste(0,month, sep="")}
+  if (month>=10){month_string<-as.character(month)}
+  file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2005_", month_string, ".nc", sep="")
+  kd490_raster<-raster(file_name)
+  turbidity_stack_2005<-stack(turbidity_stack_2005, kd490_raster)
+}
+mean_2005 <- calc(turbidity_stack_2005, fun = mean, na.rm = T)
+remove(turbidity_stack_2005)
+
+#2006
+file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2006_01.nc", sep="")
+kd490_raster<-raster(file_name)
+turbidity_stack_2006<-stack(kd490_raster)
+for (month in 2:12){
+  if (month<10){month_string<-paste(0,month, sep="")}
+  if (month>=10){month_string<-as.character(month)}
+  file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2006_", month_string, ".nc", sep="")
+  kd490_raster<-raster(file_name)
+  turbidity_stack_2006<-stack(turbidity_stack_2006, kd490_raster)
+}
+mean_2006 <- calc(turbidity_stack_2006, fun = mean, na.rm = T)
+remove(turbidity_stack_2006)
+
+#2007
+file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2007_01.nc", sep="")
+kd490_raster<-raster(file_name)
+turbidity_stack_2007<-stack(kd490_raster)
+for (month in 2:12){
+  if (month<10){month_string<-paste(0,month, sep="")}
+  if (month>=10){month_string<-as.character(month)}
+  file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2007_", month_string, ".nc", sep="")
+  kd490_raster<-raster(file_name)
+  turbidity_stack_2007<-stack(turbidity_stack_2007, kd490_raster)
+}
+mean_2007 <- calc(turbidity_stack_2007, fun = mean, na.rm = T)
+remove(turbidity_stack_2007)
+stack_2003_through_2007<-stack(mean_2003, mean_2004, mean_2005, mean_2006, mean_2007)
+mean_2003_through_2007 <- calc(stack_2003_through_2007, fun = mean, na.rm = T)
+remove(mean_2003, mean_2004, mean_2005, mean_2006, mean_2007)
+remove(stack_2003_through_2007)
+
+#2008
+file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2008_01.nc", sep="")
+kd490_raster<-raster(file_name)
+turbidity_stack_2008<-stack(kd490_raster)
+for (month in 2:12){
+  if (month<10){month_string<-paste(0,month, sep="")}
+  if (month>=10){month_string<-as.character(month)}
+  file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2008_", month_string, ".nc", sep="")
+  kd490_raster<-raster(file_name)
+  turbidity_stack_2008<-stack(turbidity_stack_2008, kd490_raster)
+}
+mean_2008 <- calc(turbidity_stack_2008, fun = mean, na.rm = T)
+remove(turbidity_stack_2008)
+
+#2009
+file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2009_01.nc", sep="")
+kd490_raster<-raster(file_name)
+turbidity_stack_2009<-stack(kd490_raster)
+for (month in 2:12){
+  if (month<10){month_string<-paste(0,month, sep="")}
+  if (month>=10){month_string<-as.character(month)}
+  file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2009_", month_string, ".nc", sep="")
+  kd490_raster<-raster(file_name)
+  turbidity_stack_2009<-stack(turbidity_stack_2009, kd490_raster)
+}
+mean_2009 <- calc(turbidity_stack_2009, fun = mean, na.rm = T)
+remove(turbidity_stack_2009)
+
+#2010
+file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2010_01.nc", sep="")
+kd490_raster<-raster(file_name)
+turbidity_stack_2010<-stack(kd490_raster)
+for (month in 2:12){
+  if (month<10){month_string<-paste(0,month, sep="")}
+  if (month>=10){month_string<-as.character(month)}
+  file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2010_", month_string, ".nc", sep="")
+  kd490_raster<-raster(file_name)
+  turbidity_stack_2010<-stack(turbidity_stack_2010, kd490_raster)
+}
+mean_2010 <- calc(turbidity_stack_2010, fun = mean, na.rm = T)
+remove(turbidity_stack_2010)
+
+#2011
+file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2011_01.nc", sep="")
+kd490_raster<-raster(file_name)
+turbidity_stack_2011<-stack(kd490_raster)
+for (month in 2:12){
+  if (month<10){month_string<-paste(0,month, sep="")}
+  if (month>=10){month_string<-as.character(month)}
+  file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2011_", month_string, ".nc", sep="")
+  kd490_raster<-raster(file_name)
+  turbidity_stack_2011<-stack(turbidity_stack_2011, kd490_raster)
+}
+mean_2011 <- calc(turbidity_stack_2011, fun = mean, na.rm = T)
+remove(turbidity_stack_2011)
+
+#2012
+file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2012_01.nc", sep="")
+kd490_raster<-raster(file_name)
+turbidity_stack_2012<-stack(kd490_raster)
+for (month in 2:12){
+  if (month<10){month_string<-paste(0,month, sep="")}
+  if (month>=10){month_string<-as.character(month)}
+  file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2012_", month_string, ".nc", sep="")
+  kd490_raster<-raster(file_name)
+  turbidity_stack_2012<-stack(turbidity_stack_2012, kd490_raster)
+}
+mean_2012 <- calc(turbidity_stack_2012, fun = mean, na.rm = T)
+remove(turbidity_stack_2012)
+stack_2008_through_2012<-stack(mean_2008, mean_2009, mean_2010, mean_2011, mean_2012)
+mean_2008_through_2012<-calc(stack_2008_through_2012, fun = mean, na.rm = T)
+remove(mean_2008, mean_2009, mean_2010, mean_2011, mean_2012)
+remove(stack_2008_through_2012)
+
+#2013
+file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2013_01.nc", sep="")
+kd490_raster<-raster(file_name)
+turbidity_stack_2013<-stack(kd490_raster)
+for (month in 2:12){
+  if (month<10){month_string<-paste(0,month, sep="")}
+  if (month>=10){month_string<-as.character(month)}
+  file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2013_", month_string, ".nc", sep="")
+  kd490_raster<-raster(file_name)
+  turbidity_stack_2013<-stack(turbidity_stack_2013, kd490_raster)
+}
+mean_2013 <- calc(turbidity_stack_2013, fun = mean, na.rm = T)
+remove(turbidity_stack_2013)
+
+#2014
+file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2014_01.nc", sep="")
+kd490_raster<-raster(file_name)
+turbidity_stack_2014<-stack(kd490_raster)
+for (month in 2:12){
+  if (month<10){month_string<-paste(0,month, sep="")}
+  if (month>=10){month_string<-as.character(month)}
+  file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2014_", month_string, ".nc", sep="")
+  kd490_raster<-raster(file_name)
+  turbidity_stack_2014<-stack(turbidity_stack_2014, kd490_raster)
+}
+mean_2014 <- calc(turbidity_stack_2014, fun = mean, na.rm = T)
+remove(turbidity_stack_2014)
+
+#2015
+file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2015_01.nc", sep="")
+kd490_raster<-raster(file_name)
+turbidity_stack_2015<-stack(kd490_raster)
+for (month in 2:12){
+  if (month<10){month_string<-paste(0,month, sep="")}
+  if (month>=10){month_string<-as.character(month)}
+  file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2015_", month_string, ".nc", sep="")
+  kd490_raster<-raster(file_name)
+  turbidity_stack_2015<-stack(turbidity_stack_2015, kd490_raster)
+}
+mean_2015 <- calc(turbidity_stack_2015, fun = mean, na.rm = T)
+remove(turbidity_stack_2015)
+
+#2016
+file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2016_01.nc", sep="")
+kd490_raster<-raster(file_name)
+turbidity_stack_2016<-stack(kd490_raster)
+for (month in 2:12){
+  if (month<10){month_string<-paste(0,month, sep="")}
+  if (month>=10){month_string<-as.character(month)}
+  file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2016_", month_string, ".nc", sep="")
+  kd490_raster<-raster(file_name)
+  turbidity_stack_2016<-stack(turbidity_stack_2016, kd490_raster)
+}
+mean_2016 <- calc(turbidity_stack_2016, fun = mean, na.rm = T)
+remove(turbidity_stack_2016)
+
+#2017
+file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2017_01.nc", sep="")
+kd490_raster<-raster(file_name)
+turbidity_stack_2017<-stack(kd490_raster)
+for (month in 2:12){
+  if (month<10){month_string<-paste(0,month, sep="")}
+  if (month>=10){month_string<-as.character(month)}
+  file_name<-paste("MODIS_Aqua_Monthly_4km_KD490_2017_", month_string, ".nc", sep="")
+  kd490_raster<-raster(file_name)
+  turbidity_stack_2017<-stack(turbidity_stack_2017, kd490_raster)
+}
+mean_2017 <- calc(turbidity_stack_2017, fun = mean, na.rm = T)
+remove(turbidity_stack_2017)
+stack_2013_through_2017<-stack(mean_2013, mean_2014, mean_2015, mean_2016, mean_2017)
+mean_2013_through_2017<-calc(stack_2013_through_2017, fun = mean, na.rm = T)
+remove(mean_2013, mean_2014, mean_2015, mean_2016, mean_2017)
+remove(stack_2013_through_2017)
+
+all_years<-stack(mean_2003_through_2007, mean_2008_through_2012, mean_2013_through_2017)
+mean_all_years<-calc(all_years, fun = mean, na.rm = T)
+remove(all_years)
+remove(mean_2003_through_2007, mean_2008_through_2012, mean_2013_through_2017)
+
+setwd(home)
+writeRaster(mean_all_years, filename="turbidity_raster_mean.nc")

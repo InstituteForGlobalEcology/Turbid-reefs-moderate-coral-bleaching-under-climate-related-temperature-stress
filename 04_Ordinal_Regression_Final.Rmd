@@ -1,0 +1,215 @@
+---
+title: "ordinal_regression_final"
+author: "SS"
+date: "November 24, 2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+#This reads in a csv file containing Reef Check data along with the SST and turbidity data. It runs the data through an ordinal regression model. 
+
+```{r initialization}
+library(ggplot2)
+library(R2jags)
+```
+home<-"C:/Users/Shannon/Desktop/Ecoregions/turbidity/Final"
+
+ECO <- readOGR(file.path(home,'ecoregion_exportPolygon','ecoregion_exportPolygon.shp')) # ecoregions
+
+```{r get rid of the holes in the polygon shapefiles}
+ecos_list<-c()
+for (i in 1:150){
+  eco_i<-Polygons((Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)), ID=i)
+  ecos_list<-append(ecos_list, values=eco_i, after = length(ecos_list))
+  Sys.sleep(.2)
+}
+ecos<-SpatialPolygons(ecos_list)
+
+ecos$ERG<-ECO$ERG
+ecos$Ecoregion<-ECO$Ecoregion
+ecos@proj4string<-ECO@proj4string
+ecos@plotOrder<-ECO@plotOrder
+ecos@data<-ECO@data
+
+ECO<-ecos
+```
+
+```{r read in and format data}
+data <- read.csv(file=file.path(home,"Reef_Check_with_turbidity_kd490.csv"), header=TRUE, sep=",")
+data <- subset(data, Organism.Code=="Bleaching (% of population)")
+names(data)[names(data)=="ï..Reef.ID"]<-"Reef.ID"
+
+source(file=file.path(home,"MyBUGSOutput.R"))
+
+# calculate bleaching metrics
+data$bleach.prez <- 0
+data$bleach.prez[rowSums(data[c('S1','S2','S3','S4')],na.rm=T) >= 1] <- 1
+data$avg.bleach <- rowSums(data[c('S1','S2','S3','S4')],na.rm=T)/rowSums(!is.na(data[c('S1','S2','S3','S4')]))
+data$avg.bleach[data$avg.bleach < 1] <-0
+
+# temperature
+data$Temperature_Kelvin <- data$Temperature_Kelvin - 273.15
+data <- data[!is.na(data$Temperature_Kelvin),]
+data <- data[!is.na(data$kd490_value),]
+data <-data[data$kd490_value<=1,]
+
+```
+
+```{r define severity level categories}
+#4 categories for bleaching: none, mild, moderate, severe
+data$severity<-"none"
+data$severity[data$avg.bleach>=1 & data$avg.bleach<=10]<-"mild"
+data$severity[data$avg.bleach>10 & data$avg.bleach<50]<-"moderate"
+data$severity[data$avg.bleach>=50]<-"severe"
+data$severity<-as.factor(data$severity)
+```
+
+data<-data[!is.na(data$Region),]
+data<-data[!is.na(data$kd490_value),]
+
+#Ordinal Regression. ranked scoring. ranging from 1="none" to 4="severe"
+data$severity_score<-as.character(data$severity)
+data$severity_score[data$severity=="none"]<-1
+data$severity_score[data$severity=="mild"]<-2
+data$severity_score[data$severity=="moderate"]<-3
+data$severity_score[data$severity=="severe"]<-4
+data$severity_score<-as.numeric(data$severity_score)
+data$severity_score<-as.factor(data$severity_score)
+
+names(data)[names(data)=="Region.x"]<-"Region"
+data$ERG<-data$Region
+
+data<-subset(data, select=c('kd490_value', 'Temperature_Kelvin', 'ERG', 'severity_score', 'Reef.ID'))
+
+data$Reef.ID <- as.factor(as.character(data$Reef.ID))
+sites_and_region_df <- data %>% distinct(Reef.ID, ERG) %>% ungroup()
+sites_and_region_df$site <- as.factor(as.numeric(as.factor(sites_and_region_df$Reef.ID)))
+sites_and_region_df$region <- as.factor(as.numeric(as.factor(as.character(sites_and_region_df$ERG))))
+data <- left_join(data,sites_and_region_df,by='Reef.ID')
+data$region<-as.factor(as.numeric(data$region))
+data$site<-as.factor(as.numeric(data$site))
+
+
+```{r only sst and turbidity and interaction}
+X_raw <- data[c('kd490_value','Temperature_Kelvin')]
+X_raw$turbidity_sst_interaction<-X_raw$kd490_value*X_raw$Temperature_Kelvin
+
+standardize_function<-function(x){
+  x.standardized=(x-mean(na.omit(x)))/sd(na.omit(x))
+  return(x.standardized)
+}
+
+X_standardized <- X_raw; for(i in 1:ncol(X_raw)) X_standardized[,i] <- standardize_function(X_raw[,i])
+
+X <- model.matrix(~ X_standardized$kd490_value  +  X_standardized$Temperature_Kelvin  +  X_standardized$turbidity_sst_interaction)
+
+parameter_names<-c('Turbidity', 'SST', 'Turbidity_SST_interaction')
+```
+
+K <- length(levels(data$severity_score))
+num_vars <- ncol(X)
+win.data <- list(Y = data$severity_score,
+                 num_surveys = nrow(data),
+                 X = X,
+                 K = K,
+                 num_vars = num_vars,
+                 Site = data$site, #Random effects identification 
+                 R    = length(unique(data$region)),
+                 J    = length(unique(data$site)),
+                 region_for_each_site = sites_and_region_df$region
+)
+
+sink("ordinal_regression.txt")
+cat("
+    model{
+    #PRIORS
+    for (i in 1:num_vars) { beta[i]  ~ dnorm(0, 0.001) }
+
+    #Prior for tau_Site
+    sigma_Site ~ dgamma(0.001, 0.001)
+    tau_site <- 1 / (sigma_Site * sigma_Site)
+    
+    #Prior for tau_ecoregion
+    sigma_ecoregion ~ dgamma(0.001, 0.001)
+    tau_ecoregion <- 1 / (sigma_ecoregion * sigma_ecoregion)
+    
+    # Hierarchical effects
+    for(j in 1:J){ # J is total number of sites
+    a[j] ~ dnorm(ecoregion[region_for_each_site[j]],tau_site) # each site is drawn from each ecoregion
+    }
+    
+    for(z in 1:R){ # R is total number of ecoregions
+    ecoregion[z] ~ dnorm(g[z],tau_ecoregion) # each ecoregion mean is drawn from a distribution with a global mean
+    g[z] <- mu_global
+    }
+    mu_global ~ dnorm(0, 0.001) # prior for global mean
+
+for (i in 1:num_surveys){
+  Y[i] ~ dcat(p[i,])
+  p[i,1] <-1-Q[i,1]
+  for (r in 2:(K-1)){
+    p[i,r] <- Q[i,r-1] - Q[i,r]
+  }
+  p[i,K] <-Q[i,(K-1)]
+  for (r in 1:(K-1)){
+    logit(Q[i,r]) <-inprod(beta[], X[i,]) - c[r] + a[Site[i]]
+  }
+
+#Simulated data, taken from the fitted model.
+YNew[i] ~  dcat(p[i,])
+
+loglik[i] <- logdensity.cat(Y[i], p[i,])
+}
+
+for (i in 1:(K-1)){dc[i] ~ dunif(0,100)}
+c[1] <-dc[1]
+for (i in 2:(K-1)){
+  c[i] <-c[i-1] + dc[i]
+}
+    }
+    ",fill = TRUE)
+sink()
+
+inits  <- function () {list(beta = rnorm(ncol(X), 0, 0.1), sigma_Site = runif(1, 0, 1), sigma_ecoregion = runif(1, 0, 1), mu_global = rnorm(1,0,1))}
+
+params <- c("beta", "YNew")
+
+G1 <- jags(data       = win.data,
+           inits      = inits,
+           parameters = params,
+           model      = "ordinal_regression.txt",
+           n.thin     = 1,
+           n.chains   = 3,
+           n.burnin   = 4000,
+           n.iter     = 5000)
+
+Y_New<-G1$BUGSoutput$mean$YNew
+
+vars <- c("beta[2]","beta[3]","beta[4]")
+OUT1 <- MyBUGSOutput(G1$BUGSoutput, vars)
+print(OUT1, digits =3)
+
+# coef plot
+G1_df=data.frame(variableG1=parameter_names, MeanG1=OUT1[,1], Down=OUT1[,3], Up=OUT1[,4], Down_quarter=OUT1[,5], Up_quarter=OUT1[,6])
+G1_df$color <- ("white")
+G1_df$color[(G1_df$MeanG1 > 0) & (G1_df$Down>0)] <- 'red'
+G1_df$color[(G1_df$MeanG1 < 0) & (G1_df$Up<0)] <- 'blue'
+
+tiff(file=file.path(home,'Figure2.tif'),height=2000,width=2700,res=300)
+ggplot(G1_df,aes(x=reorder(variableG1, MeanG1), MeanG1)) +
+  geom_errorbar(aes(ymax=G1_df$Up, ymin=G1_df$Down), width=0) +
+  geom_errorbar(aes(ymax=G1_df$Up_quarter, ymin=G1_df$Down_quarter), width=0, size=1.3) +
+  geom_point(pch=21, size=4, fill=G1_df$color, color="black") +
+  coord_flip(ylim=c(-3.2,3.2)) +
+  scale_y_continuous(breaks=c(-3,-2,-1,0,1,2,3))+
+  #theme_grey(base_size=15) +
+  theme(axis.text.y = element_text(size=20, color="black"), axis.text.x = element_text(size=20, color="black"), text=element_text(size=24)) +
+  theme(panel.border = element_rect(fill=NA,color="black", size=1, linetype="solid"))+
+  theme(panel.background = element_blank()) +
+  guides(colour=FALSE)+
+  geom_hline(yintercept=0, linetype="dashed", color="gray") +
+  labs(y=expression(paste("Estimated ",gamma," coefficients")), x="")
+dev.off()
+
+write.csv(G1_df, file = file.path(home,'ordinal_coeffs_sst_turbidity_and_interaction.csv'),row.names=T)

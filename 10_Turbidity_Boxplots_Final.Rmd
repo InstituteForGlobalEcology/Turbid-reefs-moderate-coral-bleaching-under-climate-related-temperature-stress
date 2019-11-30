@@ -1,0 +1,63 @@
+---
+title: "Turbidity_boxplots"
+author: "SS"
+date: "November 23, 2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+#This reads in the csv file we created that has the Reef Check data and the Kd490 turbidity value for each survey. It creates a boxplot that shows the turbidity in each ecoregion (as defined by Veron) and sorts them according to longitude.
+
+home<-"C:/Users/Shannon/Desktop/Ecoregions/turbidity/Final"
+data <- read.csv(file=file.path(home,"Reef_Check_with_turbidity_kd490.csv"), header=TRUE, sep=",")
+data <- subset(data, Organism.Code=="Bleaching (% of population)")
+data$Lat <- data$Latitude.Degrees; data$Long <- data$Longitude.Degrees
+names(data)[names(data)=="ï..Reef.ID"]<-"Reef.ID"
+
+ECO <- readOGR(file.path(home,'ecoregion_exportPolygon','ecoregion_exportPolygon.shp')) # ecoregions
+
+```{r get rid of the holes in the polygon shapefiles}
+ecos_list<-c()
+for (i in 1:150){
+  eco_i<-Polygons((Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)), ID=i)
+  ecos_list<-append(ecos_list, values=eco_i, after = length(ecos_list))
+  #include a brief pause because if running in Rstudio, it takes a while for the code to run and for the value to be loaded into the global environment. If there is no pause, the next iteration of the loop starts before the previous value is fully saved and loaded into the environment, and there can be errors in the shapefile 
+  Sys.sleep(.2)
+}
+ecos<-SpatialPolygons(ecos_list)
+
+ecos$ERG<-ECO$ERG
+ecos$Ecoregion<-ECO$Ecoregion
+ecos@proj4string<-ECO@proj4string
+ecos@plotOrder<-ECO@plotOrder
+ecos@data<-ECO@data
+
+ECO<-ecos
+```
+
+#turbidity boxplots per ecoregion
+```{r turbidity boxplots per ecoregion}
+#When I make boxplots of turbidity, I want to order (display) them according to Longitude
+longitude_midpt<-data.frame(midpt=rep(0, times=length(levels(data$Region))), ERG=as.character(levels(data$Region)))
+
+for (i in 1:length(levels(data$Region))){
+  longitude_midpt$midpt[i]<-ECO[ECO$ERG==as.character(levels(data$Region))[i],]@bbox['x','min']+(ECO[ECO$ERG==as.character(levels(data$Region))[i],]@bbox['x','max']-ECO[ECO$ERG==as.character(levels(data$Region))[i],]@bbox['x','min'])/2
+  longitude_midpt$ERG[i]<-as.character(ECO[ECO$ERG==as.character(levels(data$Region))[i],]$ERG)
+}
+longitude_midpt<-longitude_midpt[order(longitude_midpt$midpt),]
+
+data$group=data$Region
+data$group<-factor(data$Region, levels=as.character(longitude_midpt$ERG))
+x_axis_names<-as.character(ECO[match(as.character(levels(data$group)), as.character(ECO$ERG)),]$Ecoregion)
+
+boxplot_function<-function(y){
+  file_name<-paste("FigureS2.png", sep="")
+  png(file=file.path(home, file_name), res=330,width=4000,height=3000)
+  par(mar=c(20,4.1,1.1,1.1))
+  boxplot(y~group, data=data, las=2, xlab="", ylab=expression("K"[d]*"490"), ylim=c(0,1), names=x_axis_names)
+  #mtext(side=1, text="Ecoregion", line=4)
+  dev.off()
+}
+boxplot_function(data$kd490_value)
+```

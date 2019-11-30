@@ -1,0 +1,93 @@
+---
+title: "Untitled"
+author: "SS"
+date: "November 29, 2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+#This reads in the ReefBase shapefiles, which are shapefiles of all the reefs globally. We overlay the reef shapefiles wth the ecoregion shapefiles to determine the ecoregion that each reef falls within. We sample 10000 random locations on reefs within each ecoregion, and extract the corresponding turbidity value. We calculate the percentage of the 10000 points withn each ecoregion that fall within the 'moderating turbidity' range of 0.08-0.127 kd490. We write a csv that as this information which will later be used to make a map.
+
+```{r load libraries}
+library(ncdf4)
+library(stringr)
+library(raster)
+library(rgdal)
+library(MASS)
+library(sp)
+library(RColorBrewer)
+library(fields)
+```
+home<-"C:/Users/Shannon/Desktop/Ecoregions/turbidity/Final"
+setwd(home)
+turbidity_raster<-raster("turbidity_raster_mean.nc")
+ReefBASE_directory<-"D:/Lab Data/Global/REEFBase"
+ReefBASE <- readOGR(file.path(ReefBASE_directory,'reefs.shp'))
+
+ECO <- readOGR(file.path(home,'ecoregion_exportPolygon','ecoregion_exportPolygon.shp'))
+
+```{r get rid of the holes in the polygon shapefiles}
+ecos_list<-c()
+for (i in 1:150){
+  eco_i<-Polygons((Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)), ID=i)
+  ecos_list<-append(ecos_list, values=eco_i, after = length(ecos_list))
+  Sys.sleep(.2)
+}
+ecos<-SpatialPolygons(ecos_list)
+
+ecos$ERG<-ECO$ERG
+ecos$Ecoregion<-ECO$Ecoregion
+ecos@proj4string<-ECO@proj4string
+ecos@plotOrder<-ECO@plotOrder
+ecos@data<-ECO@data
+
+ECO<-ecos
+```
+
+proj4string(ReefBASE)<-CRS("+init=epsg:3857 +proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=150.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +no_defs")
+ReefBASE<-spTransform(ReefBASE, proj4string(ECO))
+
+e<-extent(-180,180,-89.9,89.9)
+turbidity_raster<-crop(turbidity_raster, extent(e))
+turbidity_raster<-projectRaster(turbidity_raster, crs=proj4string(ECO))
+
+reefs_per_eco<-over(ReefBASE, ECO)
+
+#some of the reefs are just outside the ecoregion polygon boundaries, because the ecoregion polygon boundaries are more coarse than the reef polygons. We find the nearest ecoregion polygon for these reefs instead. This section takes a long time to run (2-3 days on a laptop), so we only run it once and then save the information off in a csv.
+
+for (i in 1:dim(ReefBASE)[1]){
+  if (is.na(reefs_per_eco$ERG[i])){
+    reefs_per_eco$ERG[i]<-as.character(ECO[which.min(gDistance(ReefBASE[i,],ECO, byid=TRUE)),]$ERG)
+  }
+}
+
+eco_list<-levels(reefs_per_eco$ERG)
+ecoregions_turbidity_probabilities<-data.frame("ERG"=eco_list, "Ecoregion"=rep(0, times=150), "Proportion_within_ideal_range"=rep(0, times=150), "Area_within_ideal_range"=rep(0, times=150))
+for (i in 1:150){
+  ecoregions_turbidity_probabilities$Ecoregion[i]<-as.character(ECO$Ecoregion[ECO$ERG==eco_list[i]])
+}
+
+
+#for some reason i=134 (ERG134) can't do sample() with n=1001 and 1000 - it might be a size issue. Therefore, I need to switch to n=101 and 100 but do more loops.
+for (i in 1:length(eco_list)){
+    indices<-(reefs_per_eco$ERG==eco_list[i])
+    indices[is.na(indices)]<-FALSE
+    
+    eco_i_reefs<-ReefBASE[indices==TRUE,]
+    if (dim(eco_i_reefs)[1]>0){
+      sampling_from_eco<-sample(spsample(eco_i_reefs, n = 101, "stratified"),100, replace=TRUE)
+      for (j in 1:99){
+        sampling_from_eco<-rbind(sampling_from_eco, sample(spsample(eco_i_reefs, n = 101, "stratified"),100, replace=TRUE))
+      }
+        turbidity_sampling_from_eco<-extract(turbidity_raster, sampling_from_eco)
+      if (sum(is.na(turbidity_sampling_from_eco))<10000){
+      ecoregions_turbidity_probabilities$Proportion_within_ideal_range[i]<-sum(na.omit(turbidity_sampling_from_eco)>=0.080 & na.omit(turbidity_sampling_from_eco)<=0.127)/length(na.omit(turbidity_sampling_from_eco))
+      ecoregions_turbidity_probabilities$Area[i]<-sum(eco_i_reefs@data$AREA_KM2)
+      ecoregions_turbidity_probabilities$Area_within_ideal_range[i]<-ecoregions_turbidity_probabilities$Proportion_within_ideal_range[i]*ecoregions_turbidity_probabilities$Area[i]
+      }
+    }
+    print(i)
+}
+
+write.csv(ecoregions_turbidity_probabilities, file=file.path(home, "Ecoregion_turbidity_probabilities_080_to_127.csv"),row.names=TRUE)

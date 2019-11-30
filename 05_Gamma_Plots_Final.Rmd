@@ -1,0 +1,119 @@
+---
+title: "gamma_plots"
+author: "SS"
+date: "November 23, 2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+#This reads in the Reef Check with kd490 (turbidity) data, determines probability densities of kd490 values for each bleaching severity level, and determines the mean kd490 value for each bleaching severity level. It creates the image file 'gamma_distribution_of_kd490_values_for_bleaching_levels_20191121.tif'. It determines goodness-of-fit. It determines the Kd490 value when the probability density of none_to_mild_bleaching becomes greater than the probability density of moderate_to_severe_bleaching.
+
+#read in data
+home<-"C:/Users/Shannon/Desktop/Ecoregions/turbidity/Final"
+data <- read.csv(file=file.path(home,"Reef_Check_with_turbidity_kd490.csv"), header=TRUE, sep=",")
+data <- subset(data, Organism.Code=="Bleaching (% of population)")
+data$Lat <- data$Latitude.Degrees; data$Long <- data$Longitude.Degrees
+names(data)[names(data)=="ï..Reef.ID"]<-"Reef.ID"
+
+# calculate average bleaching
+data$bleach.prez <- 0
+data$bleach.prez[rowSums(data[c('S1','S2','S3','S4')],na.rm=T) >= 1] <- 1
+data$avg.bleach <- rowSums(data[c('S1','S2','S3','S4')],na.rm=T)/rowSums(!is.na(data[c('S1','S2','S3','S4')]))
+data$avg.bleach[data$avg.bleach < 1] <-0
+
+```{r remove rows with NA}
+data <- data[!is.na(data$Diversity),]
+data <- data[!is.na(data$Latitude.Degrees),]
+data <- data[!is.na(data$ClimSST),]
+data <- data[!is.na(data$TSA_Frequency_Standard_Deviation),]
+data <- data[!is.na(data$TSA_Frequency),]
+data <- data[!is.na(data$Temperature_Kelvin),]
+#data <- data[!is.na(data$Rate_of_SST_change),]
+data <- data[!is.na(data$rate_of_SST_change),]
+data <- data[!is.na(data$SSTA_DHW),]
+data <- data[!is.na(data$SSTA_Frequency),]
+data <- data[!is.na(data$Year),]
+data <- data[!is.na(data$SSTA_Maximum),]
+data <- data[!is.na(data$SSTA_Minimum),]
+data <- data[!is.na(data$Depth),]
+data <- data[!is.na(data$Temperature_Maximum),]
+data <- data[!is.na(data$SSTA),]
+data <- data[!is.na(data$TSA_DHW_Standard_Deviation),]
+data <- data[!is.na(data$SSTA_Frequency_Standard_Deviation),]
+data <- data[!is.na(data$Temperature_Kelvin_Standard_Deviation),]
+#data <- data[!is.na(data$PAR_value),]
+#data <- data[!is.na(data$kd490_value),]
+```
+
+```{r calculations}
+turbidity_distribution <- fitdistr(na.omit(data$kd490_value),'gamma')
+turbidity_distribution_for_bleaching <- fitdistr(na.omit(data$kd490_value[data$avg.bleach>0]),'gamma')
+turbidity_distribution_with_no_bleaching<-fitdistr(na.omit(data$kd490_value[data$avg.bleach==0]),'gamma')
+turbidity_distribution_mild_bleaching<-fitdistr(na.omit(data$kd490_value[data$avg.bleach>=1 & data$avg.bleach<=10]),'gamma')
+turbidity_distribution_moderate_bleaching<-fitdistr(na.omit(data$kd490_value[data$avg.bleach>10 & data$avg.bleach<50]),'gamma')
+turbidity_distribution_severe_bleaching<-fitdistr(na.omit(data$kd490_value[data$avg.bleach>=50]),'gamma')
+x=seq(0,1,.001) 
+y_no_bleaching=dgamma(x,as.numeric(turbidity_distribution_with_no_bleaching$estimate['shape']),as.numeric(turbidity_distribution_with_no_bleaching$estimate['rate']))
+y_mild_bleaching=dgamma(x,as.numeric(turbidity_distribution_mild_bleaching$estimate['shape']),as.numeric(turbidity_distribution_mild_bleaching$estimate['rate']))
+y_moderate_bleaching=dgamma(x,as.numeric(turbidity_distribution_moderate_bleaching$estimate['shape']),as.numeric(turbidity_distribution_moderate_bleaching$estimate['rate']))
+y_severe_bleaching=dgamma(x,as.numeric(turbidity_distribution_severe_bleaching$estimate['shape']),as.numeric(turbidity_distribution_severe_bleaching$estimate['rate']))
+lines(x, y_no_bleaching/sum(y_no_bleaching), col="blue", lwd=2)
+lines(x, y_mild_bleaching/sum(y_mild_bleaching), col="orange", lwd=2)
+lines(x, y_moderate_bleaching/sum(y_moderate_bleaching), col="red", lwd=2)
+lines(x, y_severe_bleaching/sum(y_severe_bleaching), col="black", lwd=2)
+
+mean_no_bleaching<-mean(na.omit(data$kd490_value[data$avg.bleach<1])) #0.06468577
+mean_mild_bleaching<-mean(na.omit(data$kd490_value[data$avg.bleach>=1 & data$avg.bleach<=10])) #0.06095361
+mean_moderate_bleaching<-mean(na.omit(data$kd490_value[data$avg.bleach>=10 & data$avg.bleach<=50])) #0.05647368
+mean_severe_bleaching<-mean(na.omit(data$kd490_value[data$avg.bleach>=50])) #0.05070975
+```
+
+```{r gamma plot}
+tiff(file=file.path(home,'Figure3.tif'),height=1000,width=2000,res=300)
+x=seq(0,1,.001) 
+plot(x, y_no_bleaching/sum(y_no_bleaching), col="blue", type="l",lwd=2, xlim=c(0,.3), ylim=c(0,.02), xlab=expression("K"[d]*"490"), ylab="Probability density")
+lines(x, y_mild_bleaching/sum(y_mild_bleaching), col="orange", lwd=2)
+lines(x, y_moderate_bleaching/sum(y_moderate_bleaching), col="red", lwd=2)
+lines(x, y_severe_bleaching/sum(y_severe_bleaching), col="black", lwd=2)
+abline(v=mean_no_bleaching, col="blue", lwd=1, lty=2, ylim=c(-1,1))
+abline(v=mean_mild_bleaching, col="orange", lwd=1, lty=2)
+abline(v=mean_moderate_bleaching, col="red", lwd=1, lty=2)
+abline(v=mean_severe_bleaching, col="black", lwd=1, lty=2)
+legend("topright", legend=c("None", "Mild (1-10%)", "Moderate (>10-50%)", "Severe (>50%)"), col=c("blue", "orange", "red", "black"),pch=NA, lty=1, lwd=2)
+dev.off()
+```
+
+logLik(turbidity_distribution)  #16780.41 (df=2)
+logLik(turbidity_distribution_for_bleaching) #4485.148 (df=2)
+logLik(turbidity_distribution_with_no_bleaching) #12351.72 (df=2)
+logLik(turbidity_distribution_mild_bleaching) #3361.311 (df=2)
+logLik(turbidity_distribution_moderate_bleaching) #875.771 (df=2)
+logLik(turbidity_distribution_severe_bleaching) #261.8319 (df=2)
+
+#-2*ln((likelihood of null model)/(likelihood of alternative model))
+logLik_pooled <- turbidity_distribution$loglik
+#16780.41
+
+#for no bleaching vs bleaching
+logLik_sum <- turbidity_distribution_with_no_bleaching$loglik + turbidity_distribution_for_bleaching$loglik
+LR<- (2)*(logLik_sum-logLik_pooled)  #112.9129
+pchisq(2*(logLik_sum-logLik_pooled),df=2,lower.tail=FALSE) #<0.0001
+
+```{r examine turbidity values (x) when one none_and_mild_bleaching probability density becomes greater than moderate_and_severe_bleaching probability density, and LR}
+#for none_and_mild_bleaching vs moderate_and_severe_bleaching
+turbidity_distribution_none_to_mild_bleaching<-fitdistr(na.omit(data$kd490_value[data$avg.bleach<=10]),'gamma')
+turbidity_distribution_moderate_to_severe_bleaching<-fitdistr(na.omit(data$kd490_value[data$avg.bleach>10]),'gamma')
+logLik_sum <- turbidity_distribution_none_to_mild_bleaching$loglik + turbidity_distribution_moderate_to_severe_bleaching$loglik
+LR<- (2)*(logLik_sum-logLik_pooled)  #49.1311
+pchisq(2*(logLik_sum-logLik_pooled),df=2,lower.tail=FALSE) #<0.0001
+
+
+#closely examine where the probability density for none_to_mild_bleaching becomes greater than the probability density for moderate_to_severe_bleaching 
+x_testing<-seq(from=0, to=0.5, by=0.0001)
+y_none_to_mild_bleaching=dgamma(x_testing,as.numeric(turbidity_distribution_none_to_mild_bleaching$estimate['shape']),as.numeric(turbidity_distribution_none_to_mild_bleaching$estimate['rate']))
+y_moderate_to_severe_bleaching=dgamma(x_testing,as.numeric(turbidity_distribution_moderate_to_severe_bleaching$estimate['shape']),as.numeric(turbidity_distribution_moderate_to_severe_bleaching$estimate['rate']))
+
+x_testing[y_none_to_mild_bleaching>y_moderate_to_severe_bleaching]
+#0.0803 is when none_to_mild_bleaching has a greater probability density than moderate_to_severe_bleaching
+```

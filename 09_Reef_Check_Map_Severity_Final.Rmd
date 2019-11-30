@@ -1,0 +1,99 @@
+---
+title: "Reef_Check_Map_Severity_Final"
+author: "SS"
+date: "November 30, 2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+#This reads in a csv of the Reef Check data. It plots the percent bleaching globally (FigureS1) and the bleaching severity globally (FigureS3).
+
+```{r initialization}
+library(rgdal)
+library(R2jags)
+library(ggplot2)
+library(RColorBrewer)
+library(plotrix)
+library(GISTools)
+library(R2OpenBUGS)
+library(dplyr)
+library(viridis)
+library(Cairo)
+```
+
+home<-"C:/Users/Shannon/Desktop/Ecoregions/turbidity/Final"
+setwd(home)
+wlrd.p <- readOGR(file.path(home,'shapefiles','TM_WORLD_BORDERS_SIMPL_PC150.shp'))
+
+data <- read.csv(file=file.path(home,"Reef_Check_with_turbidity_kd490.csv"), header=TRUE, sep=",")
+data<-data[!is.na(data$Average_bleaching),]
+data$col<-"blue"
+data$col[data$Average_bleaching>=1]<-"orange"
+data$col[data$Average_bleaching>10]<-"red"
+data$col[data$Average_bleaching>50]<-"black"
+
+```{r Figure S1}
+windowsFonts(Arial=windowsFont("TT Arial"))
+par(family="Arial")
+pal<-viridis(9)
+png(file=file.path(home,'FigureS1.png'),height=800,width=3000,res=300)
+par(mgp=c(0.5,0.6,0), mar=c(1,1,1,1))
+plot(wlrd.p,ylim=c(-4400000,4400000),xlim=c(-2000000,2000000), col='grey90',border='grey70')
+axis(1,at=c(-10018754.17,3339584.724,16697920),lab=c('60°','180°','-60° '),las=1,tcl=0.35,mgp=c(-1,-1.3,0))
+axis(2, at=c(23*111319.4666666667,0,-23*111319.4666666667),labels=c('23°','0°','-23°'),las=3,tcl=0.35,mgp=c(-2,-1.3,0),hadj=.4)
+axis(3,at=c(-10018754.17,3339584.724,16697920),lab=c('','',''),las=1,tcl=0.35,mgp=c(-1,-1.3,0))
+axis(4, at=c(23*111319.4666666667,0,-23*111319.4666666667),labels=c('','',''),las=2,tcl=0.35,mgp=c(-1,-0.6,0),hadj=0)
+box()
+
+xy <- data[data$Average_bleaching == 0,c('Longitude.Degrees','Latitude.Degrees')]
+xy <- SpatialPointsDataFrame(data=xy,coords=xy[c('Longitude.Degrees','Latitude.Degrees')], proj4string=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"))
+xy <- spTransform(xy,CRS("+proj=eqc +lat_ts=0 +lat_0=0 +lon_0=150 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+points(xy, cex=.7)
+
+temp <- subset(data, Average_bleaching > 0)
+temp <- temp[with(temp, order(temp$Average_bleaching)),]
+xy <- temp[c('Longitude.Degrees','Latitude.Degrees')]
+xy <- SpatialPointsDataFrame(data=xy,coords=xy[c('Longitude.Degrees','Latitude.Degrees')], proj4string=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"))
+xy <- spTransform(xy,CRS("+proj=eqc +lat_ts=0 +lat_0=0 +lon_0=150 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+points(xy, cex=.7)
+points(xy, cex=.9, pch=19, col=pal[temp$Average_bleaching])
+text(-7868896,-2922012,'Indian Ocean',cex=.8)
+text(9438742,487176,'Pacific Ocean',cex=.8)
+north.arrow(x=(-16654136+111319.4*320), y=1615153*2, len=(111319.4*2), lab="N", cex=.7)
+
+#legend
+plotrix::color.legend(9684797.171+25e5,-28*111319.4666666667,15807371.62+25e5,-23.5*111319.4666666667,legend=c(0,100),rect.col=c("white",pal),cex=1)
+text(((15807371.62+25e5)-(9684797.171+25e5))/2+(9684797.171+25e5),-18*111319.4666666667,"Bleaching %", cex=.75)
+dev.off()
+```
+
+```{r Bleaching severity map Figure S3}
+windowsFonts(Arial=windowsFont("TT Arial"))
+par(family="Arial")
+pal<-c("blue", "orange", "red", "black")
+png(file=file.path(home,'FigureS3.png'),height=800,width=3000,res=300)
+par(mgp=c(0.5,0.6,0), mar=c(1,1,1,1))
+plot(wlrd.p,ylim=c(-4400000,4400000),xlim=c(-2000000,2000000), col='grey90',border='grey70')
+axis(1,at=c(-10018754.17,3339584.724,16697920),lab=c('60°','180°','-60° '),las=1,tcl=0.35,mgp=c(-1,-1.3,0))
+axis(2, at=c(23*111319.4666666667,0,-23*111319.4666666667),labels=c('23°','0°','-23°'),las=3,tcl=0.35,mgp=c(-2,-1.3,0),hadj=.4)
+axis(3,at=c(-10018754.17,3339584.724,16697920),lab=c('','',''),las=1,tcl=0.35,mgp=c(-1,-1.3,0))
+axis(4, at=c(23*111319.4666666667,0,-23*111319.4666666667),labels=c('','',''),las=2,tcl=0.35,mgp=c(-1,-0.6,0),hadj=0)
+box()
+
+xy <- data[c('Longitude.Degrees','Latitude.Degrees', 'col')]
+xy <- SpatialPointsDataFrame(data=xy,coords=xy[c('Longitude.Degrees','Latitude.Degrees')], proj4string=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"))
+xy <- spTransform(xy,CRS("+proj=eqc +lat_ts=0 +lat_0=0 +lon_0=150 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+points(xy[xy$col=="blue",], cex=.7, pch=19, col="blue")
+points(xy[xy$col=="orange",], cex=.7, pch=19, col="orange")
+points(xy[xy$col=="red",], cex=.7, pch=19, col="red")
+points(xy[xy$col=="black",], cex=.7, pch=19, col="black")
+
+text(-7868896,-2922012,'Indian Ocean',cex=.8)
+text(9438742,487176,'Pacific Ocean',cex=.8)
+north.arrow(x=(-16654136+111319.4*320), y=1615153*2, len=(111319.4*2), lab="N", cex=.7)
+
+plotrix::color.legend(7084797.171+25e5,-28*111319.4666666667,15807371.62+25e5,-23.5*111319.4666666667,legend=c('None', 'Mild', 'Moderate', 'Severe'), rect.col=pal, cex=.8)
+text(((15807371.62+25e5)-(7084797.171+25e5))/2+(7084797.171+25e5),-32*111319.4666666667,"Bleaching severity", cex=.8)
+dev.off()
+```
